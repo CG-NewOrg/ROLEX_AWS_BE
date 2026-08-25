@@ -570,7 +570,7 @@ module.exports = cds.service.impl(async function () {
   });
 
 
-  
+
   this.on('extract_docxAzure', async (req) => {
     const { buffer } = req.file;
     try {
