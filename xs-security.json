@@ -1,0 +1,31 @@
+{
+  "xsappname": "aicockpit-Rolex",
+  "tenant-mode": "dedicated",
+  "description": "Security profile of called application",
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.Viewer",
+      "description": "Viewer scope"
+    },
+    {
+      "name": "$XSAPPNAME.Admin",
+      "description": "Admin Access for Deleting Files from Object Store"
+    }
+  ],
+  "role-templates": [
+    {
+      "name": "UserRoles",
+      "description": "Access for devcockpit app",
+      "scope-references": [
+        "$XSAPPNAME.Viewer"
+      ]
+    },
+    {
+      "name": "UserRolesEdit",
+      "description": "Role for creating, editing, deleting User Roles",
+      "scope-references": [
+        "$XSAPPNAME.Admin"
+      ]
+    }
+  ]
+}

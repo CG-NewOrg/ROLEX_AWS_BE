@@ -1,0 +1,60 @@
+{
+  "name": "aicockpit-Rolex-BE",
+  "version": "1.0.0",
+  "description": "A simple CAP project.",
+  "repository": "<Add your repository here>",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1027.0",
+    "@cap-js/postgres": "^1",
+    "@octokit/rest": "^21.1.1",
+    "@sap-cloud-sdk/connectivity": "^4.5.1",
+    "@sap-cloud-sdk/http-client": "^4.6.0",
+    "@sap/cds": "^8.6.1",
+    "@sap/xssec": "^4",
+    "@xmldom/xmldom": "^0.8.11",
+    "axios": "^1.18.1",
+    "docx": "^9.6.1",
+    "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "mammoth": "^1.9.0",
+    "multer": "^1.4.5-lts.1",
+    "pizzip": "^3.2.0",
+    "uuid": "^9.0.1",
+    "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "@cap-js/cds-types": "^0.8.0",
+    "@cap-js/sqlite": "^1",
+    "@sap/cds-dk": "^8",
+    "@sap/eslint-plugin-cds": "^3.2.0",
+    "eslint": "^9",
+    "jest": "^29"
+  },
+  "scripts": {
+    "start": "cds-serve"
+  },
+  "cds": {
+    "requires": {
+      "auth": "xsuaa",
+      "connectivity": true,
+      "destinations": true,
+      "db": {
+        "kind": "postgres",
+        "migrations": {
+          "enabled": true
+        },
+        "credentials": {
+          "poolConfig": {
+            "max": 20,
+            "min": 2,
+            "idleTimeoutMillis": 30000,
+            "connectionTimeoutMillis": 60000
+          }
+        }
+      }
+    }
+  }
+}
