@@ -48,10 +48,15 @@ const containsEmoji = (text) => {
   return emojiRegex.test(text);
 };
 
+// const containsSpecialChars = (text) => {
+//   const allowedPattern = /^[\w\s.,;:!?'"()\-[\]{}@#$%&*+=<>/\\|`~\n\r\t]*$/;
+//   return !allowedPattern.test(text);
+// };
 const containsSpecialChars = (text) => {
-  const allowedPattern = /^[\w\s.,;:!?'"()\-[\]{}@#$%&*+=<>/\\|`~\n\r\t]*$/;
+  const allowedPattern = /^[\p{L}\p{N}\p{M}\s.,;:!?'"()\-[\]{}@#$%&*+=<>/\\|`~_\n\r\t]*$/u;
   return !allowedPattern.test(text);
 };
+
 
 const isValidEmail = (email) => {
   const regex =
@@ -124,154 +129,459 @@ async function uploadToObjectStore(objectStoreRefKey, buffer, mimeType) {
 
 module.exports = cds.service.impl(async function () {
 
+
+  // this.on('createPromptDetails', async (req) => {
+  //   try {
+  //     const { Prompt_Details, Category, MsgType, ProjectId, PromptId, UserId, DateTime } = req.data.payload;
+
+  //     if (isNullOrNA(MsgType)) return req.reject(400, 'Please provide Message Type');
+  //     if (isNullOrNA(Category)) return req.reject(400, 'Please provide Category');
+  //     if (isNullOrNA(ProjectId)) return req.reject(400, 'Please provide ProjectId');
+  //     if (ProjectId === 'default') return req.reject(400, 'Project cannot be default');
+  //     if (isNullOrNA(Prompt_Details)) return req.reject(400, 'Please provide Message');
+  //     if (isNullOrNA(UserId)) return req.reject(400, 'Please provide UserId');
+  //     if (!isValidEmail(UserId)) return req.reject(400, 'UserId must be a valid email address');
+
+  //     // if (req.user?.id?.toLowerCase() !== UserId?.toLowerCase()) {
+  //     //   return req.reject(400, 'Mismatched email id');
+  //     // }
+
+  //     if (MsgType === 'sysMsg') {
+  //       if (isNullOrNA(PromptId)) return req.reject(400, 'Please provide System Message Name');
+  //     }
+
+  //     let generatedPromptId = PromptId;
+  //     if (Prompt_Details && typeof Prompt_Details === 'string') {
+  //       if (containsEmoji(Prompt_Details)) {
+  //         return req.reject(400, `${MsgType === 'sysMsg' ? 'System Message' : 'Prompt'} contains emojis. Please provide only text and numbers.`);
+  //       }
+  //       if (containsSpecialChars(Prompt_Details)) {
+  //         return req.reject(400, `${MsgType === 'sysMsg' ? 'System Message' : 'Prompt'} contains invalid special characters.`);
+  //       }
+  //     }
+
+  //     const insertNewRecord = async () => {
+  //       const newId = uuidv4();
+  //       const insertResult = await cds.db.tx(async tx => {
+  //         return tx.run(
+  //           INSERT.into('devcockpit_PromptTemplates').entries({
+  //             ID: newId,
+  //             Prompt_Details: Prompt_Details,
+  //             Date_Added: DateTime || new Date().toISOString(),
+  //             Category: Category,
+  //             MsgType: MsgType,
+  //             CreatedBy: UserId,
+  //             Project_Id: ProjectId,
+  //             PromptId: generatedPromptId
+  //           })
+  //         );
+  //       });
+  //       return { status: 201, message: 'Record inserted successfully', data: insertResult, PromptId: generatedPromptId };
+  //     };
+
+  //     if (MsgType === 'prompt') {
+  //       const existingPrompt = await cds.db.tx(async tx => {
+  //         return tx.run(
+  //           SELECT.from('devcockpit_PromptTemplates')
+  //             .columns('id')
+  //             .where({
+  //               prompt_details: Prompt_Details,
+  //               category: Category,
+  //               msgtype: MsgType,
+  //               project_id: { in: [ProjectId, 'default'] }
+  //             })
+  //         );
+  //       });
+
+  //       if (existingPrompt.length === 0) {
+  //         if (PromptId) {
+  //           const existingById = await cds.db.tx(async tx => {
+  //             return tx.run(
+  //               SELECT.from('devcockpit_PromptTemplates')
+  //                 .columns('id', 'project_id', 'category')
+  //                 .where({
+  //                   promptid: PromptId,
+  //                   project_id: { in: [ProjectId, 'default'] }
+  //                 })
+  //             );
+  //           });
+
+  //           if (existingById.length > 0) {
+  //             // Use lowercase column names when accessing returned data
+  //             const defaultRecord = existingById.find(r => r.project_id === 'default');
+  //             if (defaultRecord) {
+  //               return req.reject(403, `Cannot modify PromptId '${PromptId}' - it is a default ${MsgType} which is read-only.`);
+  //             } else if (existingById[0].project_id === ProjectId && existingById[0].category === Category) {
+  //               const updateResult = await cds.db.tx(async tx => {
+  //                 return tx.run(
+  //                   UPDATE('devcockpit_PromptTemplates')
+  //                     .set({
+  //                       Prompt_Details: Prompt_Details,
+  //                       UpdatedAt: DateTime,
+  //                       UpdatedBy: UserId
+  //                     })
+  //                     .where({ id: existingById[0].id })
+  //                 );
+  //               });
+  //               return { status: 200, message: 'Record updated successfully', data: updateResult };
+  //             } else {
+  //               return req.reject(403, 'Given PromptId does not exist in this project/category, cannot update');
+  //             }
+  //           } else {
+  //             generatedPromptId = PromptId;
+  //             return await insertNewRecord();
+  //           }
+  //         } else {
+  //           const countResult = await cds.db.tx(async tx => {
+  //             return tx.run(
+  //               SELECT.from('devcockpit_PromptTemplates').columns({ nextid: { func: 'count', args: ['*'] } })
+  //             );
+  //           });
+  //           const maxId = (Number(countResult[0]?.nextid) || 0) + 1;
+  //           generatedPromptId = `${Category}_${ProjectId}_${maxId}_prompt`;
+  //           return await insertNewRecord();
+  //         }
+  //       } else {
+  //         return req.reject(403, 'Detailed prompt already exists');
+  //       }
+  //     }
+
+
+  //         if (MsgType === 'sysMsg') {
+  //           // ZStreamleads or Admin role check for fstoconf category
+  //           if (Category === 'fstoconf') {
+  //             if (!req.user.is('ZStreamleads') && !req.user.is('Admin')) {
+  //               return req.error(403, 'Access denied. ZStreamleads or Admin role required to manage fstoconf system messages.');
+  //             }
+  //           }
+
+  //         const existingSysMsg = await cds.db.tx(async tx => {
+  //           return tx.run(
+  //             SELECT.from('devcockpit_PromptTemplates')
+  //               .columns('id', 'project_id')
+  //               .where({
+  //                 promptid: generatedPromptId,
+  //                 project_id: { in: [ProjectId, 'default'] }
+  //               })
+  //           );
+  //         });
+
+  //         if (existingSysMsg.length > 0) {
+  //           // Use lowercase column names when accessing returned data
+  //           if (existingSysMsg[0].project_id === 'default') {
+  //             return req.reject(403, 'Cannot update default system message');
+  //           }
+  //           const updateResult = await cds.db.tx(async tx => {
+  //             return tx.run(
+  //               UPDATE('devcockpit_PromptTemplates')
+  //                 .set({
+  //                   Prompt_Details: Prompt_Details,
+  //                   UpdatedAt: DateTime,
+  //                   UpdatedBy: UserId
+  //                 })
+  //                 .where({
+  //                   category: Category,
+  //                   msgtype: MsgType,
+  //                   promptid: generatedPromptId,
+  //                   project_id: ProjectId
+  //                 })
+  //             );
+  //           });
+  //           return { status: 200, message: 'Record updated successfully', data: updateResult };
+  //         } else {
+  //           return await insertNewRecord();
+  //         }
+  //       }
+  //   } catch (err) {
+  //       console.error('Error in createPromptDetails:', err);
+  //       return req.reject(500, `Error processing request: ${err.message}`);
+  //     }
+  //   });
+
   this.on('createPromptDetails', async (req) => {
+
     try {
+
       const { Prompt_Details, Category, MsgType, ProjectId, PromptId, UserId, DateTime } = req.data.payload;
 
+
+
       if (isNullOrNA(MsgType)) return req.reject(400, 'Please provide Message Type');
+
       if (isNullOrNA(Category)) return req.reject(400, 'Please provide Category');
+
       if (isNullOrNA(ProjectId)) return req.reject(400, 'Please provide ProjectId');
+
       if (ProjectId === 'default') return req.reject(400, 'Project cannot be default');
+
       if (isNullOrNA(Prompt_Details)) return req.reject(400, 'Please provide Message');
+
       if (isNullOrNA(UserId)) return req.reject(400, 'Please provide UserId');
+
       if (!isValidEmail(UserId)) return req.reject(400, 'UserId must be a valid email address');
 
+
+
       // if (req.user?.id?.toLowerCase() !== UserId?.toLowerCase()) {
+
       //   return req.reject(400, 'Mismatched email id');
+
       // }
 
+
+
       if (MsgType === 'sysMsg') {
+
         if (isNullOrNA(PromptId)) return req.reject(400, 'Please provide System Message Name');
+
       }
+
+
 
       let generatedPromptId = PromptId;
-      if (Prompt_Details && typeof Prompt_Details === 'string') {
-        if (containsEmoji(Prompt_Details)) {
-          return req.reject(400, `${MsgType === 'sysMsg' ? 'System Message' : 'Prompt'} contains emojis. Please provide only text and numbers.`);
-        }
-        if (containsSpecialChars(Prompt_Details)) {
-          return req.reject(400, `${MsgType === 'sysMsg' ? 'System Message' : 'Prompt'} contains invalid special characters.`);
-        }
-      }
+
+      // if (Prompt_Details && typeof Prompt_Details === 'string') {
+
+      //   if (containsEmoji(Prompt_Details)) {
+
+      //     return req.reject(400, `${MsgType === 'sysMsg' ? 'System Message' : 'Prompt'} contains emojis. Please provide only text and numbers.`);
+
+      //   }
+
+      //   if (containsSpecialChars(Prompt_Details)) {
+
+      //     return req.reject(400, `${MsgType === 'sysMsg' ? 'System Message' : 'Prompt'} contains invalid special characters.`);
+
+      //   }
+
+      // }
+
+
 
       const insertNewRecord = async () => {
+
         const newId = uuidv4();
+
         const insertResult = await cds.db.tx(async tx => {
+
           return tx.run(
+
             INSERT.into('devcockpit_PromptTemplates').entries({
+
               ID: newId,
+
               Prompt_Details: Prompt_Details,
+
               Date_Added: DateTime || new Date().toISOString(),
+
               Category: Category,
+
               MsgType: MsgType,
+
               CreatedBy: UserId,
+
               Project_Id: ProjectId,
+
               PromptId: generatedPromptId
+
             })
+
           );
+
         });
+
         return { status: 201, message: 'Record inserted successfully', data: insertResult, PromptId: generatedPromptId };
+
       };
 
+
+
       if (MsgType === 'prompt') {
-        const existingPrompt = await cds.db.tx(async tx => {
-          return tx.run(
-            SELECT.from('devcockpit_PromptTemplates')
-              .columns('id')
-              .where(`prompt_details = '${Prompt_Details}' AND category = '${Category}' AND msgtype = '${MsgType}' AND (project_id = '${ProjectId}' OR project_id = 'default')`)
-          );
-        });
 
-        if (existingPrompt.length === 0) {
-          if (PromptId) {
-            const existingById = await cds.db.tx(async tx => {
-              return tx.run(
-                SELECT.from('devcockpit_PromptTemplates')
-                  .columns('id', 'project_id', 'category')
-                  .where(`promptid = '${PromptId}' AND (project_id = '${ProjectId}' OR project_id = 'default')`)
-              );
-            });
+        if (PromptId) {
 
-            if (existingById.length > 0) {
-              // Use lowercase column names when accessing returned data
-              const defaultRecord = existingById.find(r => r.project_id === 'default');
-              if (defaultRecord) {
-                return req.reject(403, `Cannot modify PromptId '${PromptId}' - it is a default ${MsgType} which is read-only.`);
-              } else if (existingById[0].project_id === ProjectId && existingById[0].category === Category) {
-                const updateResult = await cds.db.tx(async tx => {
-                  return tx.run(
-                    UPDATE('devcockpit_PromptTemplates')
-                      .set({
-                        Prompt_Details: Prompt_Details,
-                        UpdatedAt: DateTime,
-                        UpdatedBy: UserId
-                      })
-                      .where({ id: existingById[0].id })
-                  );
-                });
-                return { status: 200, message: 'Record updated successfully', data: updateResult };
-              } else {
-                return req.reject(403, 'Given PromptId does not exist in this project/category, cannot update');
-              }
+          const existingById = await cds.db.tx(async tx => {
+
+            return tx.run(
+
+              SELECT.from('devcockpit_PromptTemplates')
+
+                .columns('id', 'project_id', 'category')
+
+                .where({ promptid: PromptId, project_id: { in: [ProjectId, 'default'] } })
+
+            );
+
+          });
+
+
+
+          if (existingById.length > 0) {
+
+            const defaultRecord = existingById.find(r => r.project_id === 'default');
+
+            if (defaultRecord) {
+
+              return req.reject(403, `Cannot modify PromptId '${PromptId}' - it is a default ${MsgType} which is read-only.`);
+
+            } else if (existingById[0].project_id === ProjectId && existingById[0].category === Category) {
+
+              const updateResult = await cds.db.tx(async tx => {
+
+                return tx.run(
+
+                  UPDATE('devcockpit_PromptTemplates')
+
+                    .set({
+
+                      Prompt_Details: Prompt_Details,
+
+                      UpdatedAt: DateTime,
+
+                      UpdatedBy: UserId
+
+                    })
+
+                    .where({ id: existingById[0].id })
+
+                );
+
+              });
+
+              return { status: 200, message: 'Record updated successfully', data: updateResult };
+
             } else {
-              generatedPromptId = PromptId;
-              return await insertNewRecord();
+
+              return req.reject(403, 'Given PromptId does not exist in this project/category, cannot update');
+
             }
+
           } else {
-            const countResult = await cds.db.tx(async tx => {
-              return tx.run(
-                SELECT.from('devcockpit_PromptTemplates').columns({ nextid: { func: 'count', args: ['*'] } })
-              );
-            });
-            const maxId = (Number(countResult[0]?.nextid) || 0) + 1;
-            generatedPromptId = `${Category}_${ProjectId}_${maxId}_prompt`;
+
+            generatedPromptId = PromptId;
+
             return await insertNewRecord();
+
           }
+
         } else {
-          return req.reject(403, 'Detailed prompt already exists');
+
+          const countResult = await cds.db.tx(async tx => {
+
+            return tx.run(
+
+              SELECT.from('devcockpit_PromptTemplates').columns({ nextid: { func: 'count', args: ['*'] } })
+
+            );
+
+          });
+
+          const maxId = (Number(countResult[0]?.nextid) || 0) + 1;
+
+          generatedPromptId = `${Category}_${ProjectId}_${maxId}_prompt`;
+
+          return await insertNewRecord();
+
         }
+
       }
+
+
 
       if (MsgType === 'sysMsg') {
+
+        // StreamLead or Admin role check only for FSD category (temporarily disabled)
+
+        // if (Category === 'FSD') {
+
+        //   if (!req.user.is('StreamLead') && !req.user.is('Admin')) {
+
+        //     return req.error(403, 'Access denied. StreamLead or Admin role required to manage FSD system messages.');
+
+        //   }
+
+        // }
+
+
+
         const existingSysMsg = await cds.db.tx(async tx => {
+
           return tx.run(
+
             SELECT.from('devcockpit_PromptTemplates')
+
               .columns('id', 'project_id')
-              .where(`promptid = '${generatedPromptId}' AND (project_id = '${ProjectId}' OR project_id = 'default')`)
+
+              .where({ promptid: generatedPromptId, project_id: { in: [ProjectId, 'default'] } })
+
           );
+
         });
 
+
+
         if (existingSysMsg.length > 0) {
+
           // Use lowercase column names when accessing returned data
+
           if (existingSysMsg[0].project_id === 'default') {
+
             return req.reject(403, 'Cannot update default system message');
+
           }
+
           const updateResult = await cds.db.tx(async tx => {
+
             return tx.run(
+
               UPDATE('devcockpit_PromptTemplates')
+
                 .set({
+
                   Prompt_Details: Prompt_Details,
+
                   UpdatedAt: DateTime,
+
                   UpdatedBy: UserId
+
                 })
+
                 .where({
+
                   category: Category,
+
                   msgtype: MsgType,
+
                   promptid: generatedPromptId,
+
                   project_id: ProjectId
+
                 })
+
             );
+
           });
+
           return { status: 200, message: 'Record updated successfully', data: updateResult };
+
         } else {
+
           return await insertNewRecord();
+
         }
+
       }
+
     } catch (err) {
+
       console.error('Error in createPromptDetails:', err);
+
       return req.reject(500, `Error processing request: ${err.message}`);
+
     }
+
   });
+
 
   this.on('deletePromptDetails', async (req) => {
     try {
@@ -739,6 +1049,33 @@ module.exports = cds.service.impl(async function () {
 
 
       content = content.replace(/```[a-zA-Z]*\n?/g, "").replace(/```/g, "").replace(/\r/g, "").trim();
+
+      // Decode any HTML entities early so final document shows intended characters
+      function decodeHtmlEntities(str) {
+        if (typeof str !== "string" || !str) return str;
+        // Numeric entities (hex and decimal)
+        str = str
+          .replace(/&#x([0-9a-f]+);?/gi, (_, hex) => {
+            const code = parseInt(hex, 16);
+            return Number.isFinite(code) ? String.fromCharCode(code) : _;
+          })
+          .replace(/&#([0-9]+);?/g, (_, dec) => {
+            const code = parseInt(dec, 10);
+            return Number.isFinite(code) ? String.fromCharCode(code) : _;
+          });
+        // Named entities (apply &amp; last)
+        str = str
+          .replace(/&lt;/gi, "<")
+          .replace(/&gt;/gi, ">")
+          .replace(/&quot;/gi, '"')
+          .replace(/&#x27;/gi, "'")
+          .replace(/&#39;/g, "'")
+          .replace(/&amp;/gi, "&");
+        return str;
+      }
+
+      // Apply decoding to the whole content prior to further processing
+      content = decodeHtmlEntities(content);
 
 
 
@@ -1472,11 +1809,93 @@ module.exports = cds.service.impl(async function () {
 
       }
 
+      function unflattenSingleLineTable(rows) {
+        if (!Array.isArray(rows) || rows.length !== 1) return rows;
+        const line = rows[0];
+        if (typeof line !== "string") return rows;
+        // Must contain a separator segment somewhere in the middle
+        // (allow one or more --- separated by | with optional : for alignment)
+        const sepRegex = /\|\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|/;
+        if (!sepRegex.test(line)) return rows;
+
+        // Split the whole line into raw cells by |
+        const rawCells = line
+          .replace(/^\s*\|/, "")
+          .replace(/\|\s*$/, "")
+          .split("|")
+          .map(c => c.trim());
+
+        // Locate the run of separator cells (cells that match /^:?-{3,}:?$/)
+        const isSepCell = (c) => /^:?-{3,}:?$/.test(c);
+        let sepStart = -1;
+        let sepEnd = -1;
+        for (let i = 0; i < rawCells.length; i++) {
+          if (isSepCell(rawCells[i])) {
+            if (sepStart === -1) sepStart = i;
+            sepEnd = i;
+          } else if (sepStart !== -1) {
+            // stop at the first non-separator cell after the run
+            break;
+          }
+        }
+        if (sepStart === -1) return rows;
+
+        // Header = cells before separator (drop trailing empties which come
+        // from the "| |" gap between header and separator in the flattened form)
+        let header = rawCells.slice(0, sepStart);
+        while (header.length && header[header.length - 1] === "") header.pop();
+        if (header.length === 0) return rows;
+
+        // Data cells = everything after the separator run, ignoring leading
+        // empty cells that come from "| |" gap between separator and data.
+        let dataCells = rawCells.slice(sepEnd + 1);
+        while (dataCells.length && dataCells[0] === "") dataCells.shift();
+
+        const colCount = header.length;
+
+        // Special-case: two-column key-value table where the AI emitted a
+        // single header cell ("Enhancement Details (if applicable)") and then
+        // (label, value) pairs. Treat this as a 2-col table by promoting the
+        // sole header cell to a full row and using colCount = 2 for the data.
+        let effectiveColCount = colCount;
+        const rebuilt = [];
+        if (colCount === 1) {
+          // Header row keeps the single cell (spans the merged column).
+          rebuilt.push("| " + header[0] + " |");
+          rebuilt.push("| --- | --- |");
+          effectiveColCount = 2;
+        } else {
+          rebuilt.push("| " + header.join(" | ") + " |");
+          rebuilt.push("| " + header.map(() => "---").join(" | ") + " |");
+        }
+
+        // Chunk data cells into rows of effectiveColCount
+        for (let i = 0; i < dataCells.length; i += effectiveColCount) {
+          const chunk = dataCells.slice(i, i + effectiveColCount);
+          if (chunk.length === 0) continue;
+          // Pad short chunk to full column count
+          while (chunk.length < effectiveColCount) chunk.push("");
+          // Skip a chunk that is entirely empty
+          if (chunk.every(c => !c)) continue;
+          rebuilt.push("| " + chunk.join(" | ") + " |");
+        }
+
+        // If we didn't actually gain anything (no data rows produced), keep original
+        if (rebuilt.length <= 2) return rows;
+        return rebuilt;
+
+      }
 
 
       function parseMarkdownTable(rows) {
+        if (Array.isArray(rows) && rows.length === 1) {
+          const rebuilt = unflattenSingleLineTable(rows);
+          if (rebuilt !== rows) rows = rebuilt;
+        }
+
 
         if (!rows || rows.length < 2) return null;
+
 
         rows = mergeBrokenTableRows(rows);
 
@@ -1539,11 +1958,8 @@ module.exports = cds.service.impl(async function () {
                       children: [
 
                         new TextRun({
-
-                          text: cell,
-
+                          text: decodeHtmlEntities(cell),
                           bold: true
-
                         })
 
                       ]
@@ -1572,7 +1988,7 @@ module.exports = cds.service.impl(async function () {
 
                       new Paragraph({
 
-                        children: [new TextRun({ text: sanitizeMarkdown(cell) })]
+                        children: [new TextRun({ text: sanitizeMarkdown(decodeHtmlEntities(cell)) })]
 
                       })
 
@@ -1702,7 +2118,7 @@ module.exports = cds.service.impl(async function () {
 
         if (!rawText) return;
 
-        let text = sanitizeMarkdown(rawText.trim());
+        let text = sanitizeMarkdown(decodeHtmlEntities(rawText.trim()));
 
         if (!text) return;
 
@@ -3280,8 +3696,6 @@ module.exports = cds.service.impl(async function () {
 
 
 
-
-
         // Detect structured placeholder: sections with mostly short label-like paragraphs
 
         // (e.g., "Assumptions:" "Business" "Technical" "Dependencies:" etc.)
@@ -3551,17 +3965,10 @@ module.exports = cds.service.impl(async function () {
 
 
               // Create a new run with the AI data text
-
               const newRun = tplDoc.createElement("w:r");
-
               const newText = tplDoc.createElement("w:t");
-
-              newText.setAttribute("xml:space", "preserve");
-
-              newText.textContent = rowData[j] || "";
-
+              newText.textContent = decodeHtmlEntities(rowData[j] || "");
               newRun.appendChild(newText);
-
               para.appendChild(newRun);
 
             }
@@ -4547,16 +4954,305 @@ module.exports = cds.service.impl(async function () {
         });
 
       }
+      function separateAdjacentTables(rootDoc, containerNode) {
+        if (!containerNode) return;
+        const kids = [];
+        for (let c = containerNode.firstChild; c; c = c.nextSibling) {
+          if (c.nodeType === 1) kids.push(c);
+        }
+        for (let i = 0; i < kids.length - 1; i++) {
+          if (kids[i].nodeName === "w:tbl" && kids[i + 1].nodeName === "w:tbl") {
+            const sep = rootDoc.createElement("w:p");
+            containerNode.insertBefore(sep, kids[i + 1]);
+          }
+        }
+      }
+
+      try {
+        const bodyForFix = templateDoc.getElementsByTagName("w:body")[0];
+        separateAdjacentTables(templateDoc, bodyForFix);
+        const allCells = templateDoc.getElementsByTagName("w:tc");
+        for (let i = 0; i < allCells.length; i++) {
+          separateAdjacentTables(templateDoc, allCells[i]);
+        }
+        console.log("[generateDocument] Post-processed adjacent tables to insert separator paragraphs");
+      } catch (sepErr) {
+        console.warn("[generateDocument] Failed to separate adjacent tables:", sepErr.message);
+      }
+
 
       const serializer = new XMLSerializer();
 
-      templateZip.file(
+      // Format today's date strings
+      const __today = new Date();
+      const __mm = String(__today.getMonth() + 1).padStart(2, "0");
+      const __dd = String(__today.getDate()).padStart(2, "0");
+      const __yyyy = String(__today.getFullYear());
+      const __yy = __yyyy.slice(-2);
+      const __dateMMDDYY = `${__mm}/${__dd}/${__yy}`;
+      const __dateMMDDYYYY = `${__mm}/${__dd}/${__yyyy}`;
+      const __dateMMDDYYYY_DASH = `${__mm}-${__dd}-${__yyyy}`;
+      const __dateDDMMYYYY_DOTS = `${__dd}.${__mm}.${__yyyy}`;
 
-        "word/document.xml",
+      // Helper to replace common date placeholders in XML strings
+      // Priority: use MM-DD-YYYY (dash) format for tokens and dashed placeholders.
+      function __replaceDatePlaceholders(xmlStr) {
+        if (!xmlStr) return xmlStr;
+        // Replace dashed placeholders like MM-DD-YYYY or mm-dd-yyyy
+        xmlStr = xmlStr.replace(/\b[mM]{2}-[dD]{2}-[yY]{4}\b/g, __dateMMDDYYYY_DASH);
+        // Replace dotted placeholders like dd.mm.yyyy
+        xmlStr = xmlStr.replace(/\b[dD]{2}\.[mM]{2}\.[yY]{4}\b/g, __dateDDMMYYYY_DOTS);
+        // Keep support for slash placeholders if present in templates
+        xmlStr = xmlStr.replace(/\b[mM]{2}\/[dD]{2}\/[yY]{2}\b/g, __dateMMDDYY);
+        xmlStr = xmlStr.replace(/\b[mM]{2}\/[dD]{2}\/[yY]{4}\b/g, __dateMMDDYYYY);
+        // Generic tokens often used in templates -> MM-DD-YYYY
+        xmlStr = xmlStr.replace(/\{\{\s*DATE\s*\}\}|\[\[\s*DATE\s*\]\]/g, __dateMMDDYYYY_DASH);
+        // Optional explicit dotted tokens
+        xmlStr = xmlStr.replace(/\{\{\s*DATE_DOTS\s*\}\}|\[\[\s*DATE_DOTS\s*\]\]/g, __dateDDMMYYYY_DOTS);
+        return xmlStr;
+      }
 
-        serializer.serializeToString(templateDoc)
+      // DOM-based replacement to handle placeholders split across runs in headers/footers
+      function __replaceDatePlaceholdersInXmlPart(xmlStr) {
+        try {
+          if (!xmlStr) return xmlStr;
+          const partDoc = new DOMParser().parseFromString(xmlStr);
+          const paragraphs = partDoc.getElementsByTagName("w:p");
 
-      );
+          // Helper to replace placeholders in plain text
+          function replaceInText(text) {
+            let replaced = text || "";
+            let did = false;
+            function rep(pattern, value) {
+              const before = replaced;
+              replaced = replaced.replace(pattern, value);
+              if (replaced !== before) did = true;
+            }
+            // Dash first
+            rep(/\b[mM]{2}-[dD]{2}-[yY]{4}\b/g, __dateMMDDYYYY_DASH);
+            // Dots
+            rep(/\b[dD]{2}\.[mM]{2}\.[yY]{4}\b/g, __dateDDMMYYYY_DOTS);
+            // Tokens
+            rep(/\{\{\s*DATE\s*\}\}|\[\[\s*DATE\s*\]\]/g, __dateMMDDYYYY_DASH);
+            rep(/\{\{\s*DATE_DOTS\s*\}\}|\[\[\s*DATE_DOTS\s*\]\]/g, __dateDDMMYYYY_DOTS);
+            // Slash (backward compat)
+            rep(/\b[mM]{2}\/[dD]{2}\/[yY]{2}\b/g, __dateMMDDYY);
+            rep(/\b[mM]{2}\/[dD]{2}\/[yY]{4}\b/g, __dateMMDDYYYY);
+            return { replaced, did };
+          }
+
+          let anyChange = false;
+          for (let i = 0; i < paragraphs.length; i++) {
+            const p = paragraphs[i];
+            // Build concatenated text of the paragraph
+            const texts = p.getElementsByTagName("w:t");
+            let combined = "";
+            for (let t = 0; t < texts.length; t++) {
+              combined += texts[t].textContent || "";
+            }
+            if (!combined) continue;
+            const { replaced, did } = replaceInText(combined);
+            if (!did) continue;
+
+            // Remove all children except pPr; then insert single run with replaced text
+            const pPrList = p.getElementsByTagName("w:pPr");
+            const pPr = (pPrList.length > 0 && pPrList[0].parentNode === p) ? pPrList[0] : null;
+
+            // Collect children to remove (every child except pPr)
+            const toRemove = [];
+            for (let c = 0; c < p.childNodes.length; c++) {
+              const node = p.childNodes[c];
+              if (node === pPr) continue;
+              toRemove.push(node);
+            }
+            toRemove.forEach(n => p.removeChild(n));
+
+            // Create new run and text
+            const newRun = partDoc.createElement("w:r");
+            const newText = partDoc.createElement("w:t");
+            newText.textContent = replaced;
+            newRun.appendChild(newText);
+            p.appendChild(newRun);
+            anyChange = true;
+          }
+
+          if (anyChange) {
+            return new XMLSerializer().serializeToString(partDoc);
+          }
+          // Fallback to string replacement when no change detected via DOM
+          return __replaceDatePlaceholders(xmlStr);
+        } catch (e) {
+          // Fallback to string replacement on any error
+          return __replaceDatePlaceholders(xmlStr);
+        }
+      }
+
+      // Build a clean, single-line standard footer with lock icon and right-aligned info
+      function __buildStandardFooter(xmlStr) {
+        try {
+          if (!xmlStr) return xmlStr;
+          const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+          const partDoc = new DOMParser().parseFromString(xmlStr);
+          // Usually the root is w:ftr
+          let ftr = partDoc.getElementsByTagName("w:ftr")[0];
+          if (!ftr) {
+            // fallback to documentElement
+            ftr = partDoc.documentElement;
+          }
+
+          // Remove all existing children from footer
+          const toRemove = [];
+          for (let i = 0; i < ftr.childNodes.length; i++) toRemove.push(ftr.childNodes[i]);
+          toRemove.forEach(n => ftr.removeChild(n));
+
+          // Create paragraph
+          const p = partDoc.createElementNS(W_NS, "w:p");
+
+          // Paragraph properties: right tab stop and default run color (light gray)
+          const pPr = partDoc.createElementNS(W_NS, "w:pPr");
+          const tabs = partDoc.createElementNS(W_NS, "w:tabs");
+          const tab = partDoc.createElementNS(W_NS, "w:tab");
+          tab.setAttributeNS(W_NS, "w:val", "right");
+          tab.setAttributeNS(W_NS, "w:pos", "9000");
+          tabs.appendChild(tab);
+          pPr.appendChild(tabs);
+          const pRPr = partDoc.createElementNS(W_NS, "w:rPr");
+          const pColor = partDoc.createElementNS(W_NS, "w:color");
+          pColor.setAttributeNS(W_NS, "w:val", "808080");
+          pRPr.appendChild(pColor);
+          pPr.appendChild(pRPr);
+          p.appendChild(pPr);
+
+          function addRunText(text) {
+            const r = partDoc.createElementNS(W_NS, "w:r");
+            const rPr = partDoc.createElementNS(W_NS, "w:rPr");
+            const c = partDoc.createElementNS(W_NS, "w:color");
+            c.setAttributeNS(W_NS, "w:val", "808080");
+            rPr.appendChild(c);
+            r.appendChild(rPr);
+            const t = partDoc.createElementNS(W_NS, "w:t");
+            t.setAttribute("xml:space", "preserve");
+            t.textContent = text;
+            r.appendChild(t);
+            p.appendChild(r);
+          }
+
+          function addTab() {
+            const r = partDoc.createElementNS(W_NS, "w:r");
+            const rPr = partDoc.createElementNS(W_NS, "w:rPr");
+            const c = partDoc.createElementNS(W_NS, "w:color");
+            c.setAttributeNS(W_NS, "w:val", "808080");
+            rPr.appendChild(c);
+            r.appendChild(rPr);
+            const tab = partDoc.createElementNS(W_NS, "w:tab");
+            r.appendChild(tab);
+            p.appendChild(r);
+          }
+
+          function addField(fieldName) {
+            // Begin
+            let rBegin = partDoc.createElementNS(W_NS, "w:r");
+            let rPr1 = partDoc.createElementNS(W_NS, "w:rPr");
+            let c1 = partDoc.createElementNS(W_NS, "w:color");
+            c1.setAttributeNS(W_NS, "w:val", "808080");
+            rPr1.appendChild(c1);
+            rBegin.appendChild(rPr1);
+            let fldBegin = partDoc.createElementNS(W_NS, "w:fldChar");
+            fldBegin.setAttributeNS(W_NS, "w:fldCharType", "begin");
+            rBegin.appendChild(fldBegin);
+            p.appendChild(rBegin);
+            // Instr
+            let rInstr = partDoc.createElementNS(W_NS, "w:r");
+            let rPr2 = partDoc.createElementNS(W_NS, "w:rPr");
+            let c2 = partDoc.createElementNS(W_NS, "w:color");
+            c2.setAttributeNS(W_NS, "w:val", "808080");
+            rPr2.appendChild(c2);
+            rInstr.appendChild(rPr2);
+            let instr = partDoc.createElementNS(W_NS, "w:instrText");
+            instr.setAttribute("xml:space", "preserve");
+            instr.textContent = ` ${fieldName} `;
+            rInstr.appendChild(instr);
+            p.appendChild(rInstr);
+            // Separate
+            let rSep = partDoc.createElementNS(W_NS, "w:r");
+            let rPr3 = partDoc.createElementNS(W_NS, "w:rPr");
+            let c3 = partDoc.createElementNS(W_NS, "w:color");
+            c3.setAttributeNS(W_NS, "w:val", "808080");
+            rPr3.appendChild(c3);
+            rSep.appendChild(rPr3);
+            let fldSep = partDoc.createElementNS(W_NS, "w:fldChar");
+            fldSep.setAttributeNS(W_NS, "w:fldCharType", "separate");
+            rSep.appendChild(fldSep);
+            p.appendChild(rSep);
+            // Result (optional blank)
+            let rRes = partDoc.createElementNS(W_NS, "w:r");
+            let rPr4 = partDoc.createElementNS(W_NS, "w:rPr");
+            let c4 = partDoc.createElementNS(W_NS, "w:color");
+            c4.setAttributeNS(W_NS, "w:val", "808080");
+            rPr4.appendChild(c4);
+            rRes.appendChild(rPr4);
+            let t = partDoc.createElementNS(W_NS, "w:t");
+            t.textContent = "";
+            rRes.appendChild(t);
+            p.appendChild(rRes);
+            // End
+            let rEnd = partDoc.createElementNS(W_NS, "w:r");
+            let rPr5 = partDoc.createElementNS(W_NS, "w:rPr");
+            let c5 = partDoc.createElementNS(W_NS, "w:color");
+            c5.setAttributeNS(W_NS, "w:val", "808080");
+            rPr5.appendChild(c5);
+            rEnd.appendChild(rPr5);
+            let fldEnd = partDoc.createElementNS(W_NS, "w:fldChar");
+            fldEnd.setAttributeNS(W_NS, "w:fldCharType", "end");
+            rEnd.appendChild(fldEnd);
+            p.appendChild(rEnd);
+          }
+
+          // Left side: lock icon + INTERNE
+          addRunText("🔒 INTERNE");
+          // Right side: via right-aligned tab
+          addTab();
+          addRunText(`ROLEX SA | ${__dateDDMMYYYY_DOTS} | `);
+          addField("PAGE");
+          addRunText(" - ");
+          addField("NUMPAGES");
+
+          ftr.appendChild(p);
+          return new XMLSerializer().serializeToString(partDoc);
+        } catch (e) {
+          // fallback: return original xml
+          return xmlStr;
+        }
+      }
+
+      // Serialize and replace placeholders in main document
+      let __docXmlString = serializer.serializeToString(templateDoc);
+      __docXmlString = __replaceDatePlaceholders(__docXmlString);
+      templateZip.file("word/document.xml", __docXmlString);
+
+      // Also replace placeholders in headers and footers if present
+      try {
+        const __headerFiles = templateZip.file(/word\/header\d+\.xml/);
+        __headerFiles.forEach(f => {
+          try {
+            const original = f.asText();
+            const updated = __replaceDatePlaceholdersInXmlPart(original);
+            templateZip.file(f.name, updated);
+          } catch (_) { /* ignore header replacement errors */ }
+        });
+      } catch (_) { /* ignore if no headers */ }
+
+      try {
+        const __footerFiles = templateZip.file(/word\/footer\d+\.xml/);
+        __footerFiles.forEach(f => {
+          try {
+            const original = f.asText();
+            // Build a clean standard footer regardless of existing content
+            const updated = __buildStandardFooter(original);
+            templateZip.file(f.name, updated);
+          } catch (_) { /* ignore footer replacement errors */ }
+        });
+      } catch (_) { /* ignore if no footers */ }
 
       const finalBuffer = templateZip.generate({
 
@@ -4565,14 +5261,24 @@ module.exports = cds.service.impl(async function () {
         compression: "DEFLATE"
 
       });
+      const templateBaseName = templateKey
+        ? path.basename(templateKey, path.extname(templateKey))
+        : null;
 
 
 
-      const safeName = (tabName || "Document")
-
+      const safeName = (templateBaseName || tabName || "Document")
         .replace(/[/\\:*?"<>|]/g, "_")
-
         .trim();
+
+
+
+
+      // const safeName = (tabName || "Document")
+
+      //   .replace(/[/\\:*?"<>|]/g, "_")
+
+      //   .trim();
 
       req._.res.setHeader(
 
@@ -4611,6 +5317,8 @@ module.exports = cds.service.impl(async function () {
 
 
   });
+
+
 
 
   this.on('viewTemplate', async (req) => {
@@ -5530,9 +6238,9 @@ module.exports = cds.service.impl(async function () {
       }
 
       const fileExtensions = fileName.match(/\.[a-zA-Z0-9]+/g) || [];
-      if (fileExtensions.length > 1) {
-        return req.error(400, "Invalid file name. Multiple extensions are not allowed (e.g., .txt.docx, .txt.txt).");
-      }
+      // if (fileExtensions.length > 1) {
+      //   return req.error(400, "Invalid file name. Multiple extensions are not allowed (e.g., .txt.docx, .txt.txt).");
+      // }
 
       const allowedExtensions = {
         'application/pdf': ['.pdf'],
@@ -6245,7 +6953,8 @@ module.exports = cds.service.impl(async function () {
           Username: userName,
           UserRoles: {
             hasAdminRole: req.user?.is('Admin') || false,
-            hasViewerRole: req.user?.is('Viewer') || false
+            hasViewerRole: req.user?.is('Viewer') || false,
+            hasZStreamleadsRole: req.user?.is('ZStreamleads') || false
           }
         };
       } else {

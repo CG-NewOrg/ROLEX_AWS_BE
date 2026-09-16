@@ -10,6 +10,10 @@
     {
       "name": "$XSAPPNAME.Admin",
       "description": "Admin Access for Deleting Files from Object Store"
+    },
+    {
+      "name": "$XSAPPNAME.StreamLead",
+      "description": "Stream Lead scope"
     }
   ],
   "role-templates": [
@@ -25,6 +29,13 @@
       "description": "Role for creating, editing, deleting User Roles",
       "scope-references": [
         "$XSAPPNAME.Admin"
+      ]
+    },
+    {
+      "name": "ZStreamleads",
+      "description": "Stream Lead role - allows creating and deleting system messages in Functional Configuration/FSD tab",
+      "scope-references": [
+        "$XSAPPNAME.StreamLead"
       ]
     }
   ]
