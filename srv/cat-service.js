@@ -1,5 +1,6 @@
 
 const cds = require('@sap/cds');
+const simpleGit = require('simple-git');
 const mammoth = require('mammoth');
 const axios = require("axios");
 const path = require('path');
@@ -12,6 +13,26 @@ require('dotenv').config();
 const { v4: uuidv4 } = require('uuid');
 const { getDestination } = require('@sap-cloud-sdk/connectivity');
 const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
+
+function buildTree(data) {
+}
+
+function cleanUpRepo(repoPath) {
+}
+
+async function cloneOrUpdateRepo(remote, repoPath, git) {
+}
+
+async function configureGitUser(git, userName, emailId) {
+  await git.addConfig('user.name', userName);
+  await git.addConfig('user.email', emailId);
+}
+
+async function ensureRepoCloned(remote, repoPath, git) {
+}
+
+async function checkoutBranch(branchName, git) {
+}
 
 
 async function aggregateModelUsageBySession(data) {
@@ -5318,9 +5339,6 @@ module.exports = cds.service.impl(async function () {
 
   });
 
-
-
-
   this.on('viewTemplate', async (req) => {
 
     try {
@@ -7603,6 +7621,307 @@ module.exports = cds.service.impl(async function () {
 
 
 
+  });
+  this.on('getAllBranches', async (req) => {
+    const { repo, username, token } = req.data.payload;
+    if (!username || !token) {
+      req.error({
+        code: '400',
+        message: 'Username and token are required in the request payload',
+        status: 400,
+      });
+      return;
+    }
+    const TEMP_REPO_PATH = path.join('/home/vcap/tmp', 'temp-repo');
+
+    const remoteUrl = repo.replace(/^https:\/\//, '');
+    const remote = `https://${username}:${token}@${remoteUrl}`;
+
+    try {
+      const git = simpleGit();
+      await cloneOrUpdateRepo(remote, TEMP_REPO_PATH, git);
+      const branches = await git.branch(['-r']);
+      return branches.all.map(branch => branch.replace('origin/', '').trim());
+    } catch (error) {
+      req.error({
+        code: '500',
+        message: `Error fetching branches: ${error.message}`,
+        status: 500
+      });
+    } finally {
+      cleanUpRepo(TEMP_REPO_PATH);
+    }
+  });
+  this.on('pushFileToGit', async (req) => {
+    const { filePath, content, commitMsg, userName, emailId, branchName, targetBranch, repo, token, username } = req.data.payload;
+    if (!isValidEmail(emailId)) return req.reject(400, 'Email_Id must be a valid email address');
+    const TEMP_REPO_PATH = path.join(__dirname, 'temp-repo');
+
+    const remoteUrl = repo.replace(/^https:\/\//, '');
+    const remote = `https://${username}:${token}@${remoteUrl}`;
+
+    try {
+      const { Octokit } = await import('@octokit/rest');
+      const octokit = new Octokit({ auth: token });
+      const git = simpleGit();
+
+      await git.listRemote([remote]);
+      await cloneOrUpdateRepo(remote, TEMP_REPO_PATH, git);
+      await configureGitUser(git, userName, emailId);
+
+      const branches = await git.branch(['-r']);
+      if (!branches.all.includes(`origin/${targetBranch}`)) {
+        throw new Error(`Target Branch ${targetBranch} does not exist`);
+      }
+
+      if (branches.all.includes(`origin/${branchName}`)) {
+        await git.checkout(branchName);
+        await git.pull('origin', branchName);
+      } else {
+        await git.checkoutLocalBranch(branchName);
+      }
+
+      const fullFilePath = path.join(TEMP_REPO_PATH, filePath);
+      const dir = path.dirname(fullFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(fullFilePath, content);
+
+      await git.add(fullFilePath);
+      await git.commit(commitMsg);
+      await git.push('origin', branchName);
+
+      const [owner, repoName] = remoteUrl.replace('.git', '').split('/').slice(-2);
+      const pullRequests = await octokit.pulls.list({
+        owner,
+        repo: repoName,
+        state: 'open',
+        head: `${owner}:${branchName}`,
+      });
+
+      if (pullRequests.data.length > 0) {
+        return 'Pull request already exists. Committed changes will reflect in existing PR.';
+      }
+
+      if (branchName === targetBranch) {
+        await git.push('origin', branchName);
+        return `Changes pushed directly to ${branchName}. No pull request created.`;
+      } else {
+        const pullRequest = await octokit.pulls.create({
+          owner,
+          repo: repoName,
+          title: commitMsg,
+          head: branchName,
+          base: targetBranch,
+          body: `Automated PR from ${branchName} to ${targetBranch}`,
+        });
+        return `Pull request created: ${pullRequest.data.html_url}`;
+      }
+    } catch (err) {
+      return `Error during Git operation: ${err.message}`;
+    } finally {
+      cleanUpRepo(TEMP_REPO_PATH);
+    }
+  });
+
+  this.on('getGitRepoTreeStructure', async (req) => {
+    const { branchName, repo, token, username } = req.data.payload;
+    const TEMP_REPO_PATH = path.join('/home/vcap/tmp', 'temp-repo');
+
+    const remoteUrl = repo.replace(/^https:\/\//, '');
+    const remote = `https://${username}:${token}@${remoteUrl}`;
+
+    try {
+      const git = simpleGit();
+      await ensureRepoCloned(remote, TEMP_REPO_PATH, git);
+      await checkoutBranch(branchName, git);
+
+      const tree = await git.raw(['ls-tree', '-r', 'HEAD']);
+      const treeStructure = tree.split('\n')
+        .filter(line => line)
+        .map(line => {
+          const [info, file] = line.split('\t');
+          const [mode, type, object, size] = info.split(' ');
+          return { mode, type, object, size, file };
+        });
+
+      return buildTree(treeStructure);
+    } catch (error) {
+      req.error({
+        code: '500',
+        message: `Error fetching repository tree: ${error.message}`,
+        status: 500
+      });
+    } finally {
+      cleanUpRepo(TEMP_REPO_PATH);
+    }
+  });
+
+  this.on('readFileFromGit', async (req) => {
+    const { pathAccess, branchName, repo, token, username } = req.data.payload;
+    const TEMP_REPO_PATH = path.join('/home/vcap/tmp', 'temp-repo');
+
+    const remoteUrl = repo.replace(/^https:\/\//, '');
+
+    const remote = `https://${username}:${token}@${remoteUrl}`;
+
+    try {
+      const git = simpleGit();
+      await ensureRepoCloned(remote, TEMP_REPO_PATH, git);
+      await checkoutBranch(branchName, git);
+
+      const filePath = path.join(TEMP_REPO_PATH, pathAccess);
+
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`File at path ${pathAccess} does not exist`);
+      }
+
+      const fileContent = fs.readFileSync(filePath, 'utf8');
+      return fileContent;
+    } catch (error) {
+      req.error({
+        code: '500',
+        message: `Error reading file: ${error.message}`,
+        status: 500
+      });
+    } finally {
+      cleanUpRepo(TEMP_REPO_PATH);
+    }
+  });
+  this.on('migrateFilePaths', async (req) => {
+    try {
+      const tx = cds.transaction(req);
+      const { s3, bucketName } = await getObjectStoreConfig();
+
+      // Fetch all file records from DB
+      const allFiles = await tx.run(
+        `SELECT "ID", "FileName", "ObjectStoreRefKey", "Category", "Project"
+         FROM "devcockpit_FileDetails"`
+      );
+
+      if (!allFiles || allFiles.length === 0) {
+        return JSON.stringify({ status: 200, message: 'No files found in database', migrated: 0, skipped: 0, errors: [] });
+      }
+
+      // UUID-based key pattern: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/<filename>
+      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\//i;
+
+      const toMigrate = allFiles.filter(f => {
+        const key = f.ObjectStoreRefKey || f.objectstorerefkey;
+        return key && uuidPattern.test(key);
+      });
+
+      if (toMigrate.length === 0) {
+        return JSON.stringify({ status: 200, message: 'All files already use the new path format. Nothing to migrate.', migrated: 0, skipped: 0, errors: [] });
+      }
+
+      console.log(`[migrateFilePaths] Found ${toMigrate.length} file(s) to migrate`);
+
+      const results = { migrated: 0, skipped: 0, errors: [] };
+
+      for (const file of toMigrate) {
+        const oldKey = file.ObjectStoreRefKey || file.objectstorerefkey;
+        const fileName = file.FileName || file.filename;
+        const category = file.Category || file.category;
+        const project = file.Project || file.project;
+
+        if (!project || !category || !fileName) {
+          console.warn(`[migrateFilePaths] Skipping record with missing project/category/fileName. oldKey: ${oldKey}`);
+          results.skipped++;
+          results.errors.push({ oldKey, error: 'Missing project, category, or fileName in DB record' });
+          continue;
+        }
+
+        const newKey = `${project}/${category}/${fileName}`;
+
+        // Skip if old and new keys are already the same
+        if (oldKey === newKey) {
+          results.skipped++;
+          continue;
+        }
+
+        try {
+          console.log(`[migrateFilePaths] Copying S3 object: "${oldKey}" -> "${newKey}"`);
+
+          // Copy object to new path in S3
+          // CopySource must be "bucket/key" — only encode special chars in the key, NOT the slash
+          await s3.send(new CopyObjectCommand({
+            Bucket: bucketName,
+            CopySource: `${bucketName}/${oldKey.split('/').map(encodeURIComponent).join('/')}`,
+            Key: newKey
+          }));
+
+          // Update ObjectStoreRefKey in DB
+          await tx.run(
+            `UPDATE "devcockpit_FileDetails" SET "ObjectStoreRefKey" = $1 WHERE "ObjectStoreRefKey" = $2`,
+            [newKey, oldKey]
+          );
+
+          // Delete old S3 object
+          await s3.send(new DeleteObjectsCommand({
+            Bucket: bucketName,
+            Delete: { Objects: [{ Key: oldKey }] }
+          }));
+
+          console.log(`[migrateFilePaths] Successfully migrated: "${oldKey}" -> "${newKey}"`);
+          results.migrated++;
+        } catch (err) {
+          console.error(`[migrateFilePaths] Failed to migrate "${oldKey}":`, err.message);
+          results.errors.push({ oldKey, newKey, error: err.message });
+          results.skipped++;
+        }
+      }
+
+      const message = `Migration complete. Migrated: ${results.migrated}, Skipped/Errors: ${results.skipped} out of ${toMigrate.length} file(s).`;
+      console.log(`[migrateFilePaths] ${message}`);
+
+      return JSON.stringify({
+        status: 200,
+        message,
+        migrated: results.migrated,
+        skipped: results.skipped,
+        errors: results.errors
+      });
+
+    } catch (err) {
+      console.error('[migrateFilePaths] Unexpected error:', err);
+      return req.error(500, 'Migration failed: ' + err.message);
+    }
+
+
+
+  });
+
+  this.on('getAllRepos', async (req) => {
+    const { token } = req.data;
+    if (!token) {
+      req.error({
+        code: '400',
+        message: 'Token is required in the request payload',
+        status: 400,
+      });
+      return;
+    }
+
+    const githubApiUrl = 'https://api.github.com/user/repos';
+
+    try {
+      const response = await axios.get(githubApiUrl, {
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+
+      return response.data.map(repo => repo.full_name);
+    } catch (error) {
+      req.error({
+        code: '500',
+        message: `Error fetching repositories: ${error.message}`,
+        status: 500
+      });
+    }
   });
 
   const URM_ENTITY = 'DEVCOCKPIT_UserResourceMapping';

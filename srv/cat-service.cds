@@ -36,7 +36,10 @@ service cockpit @(requires: 'Viewer') {
     action   deleteUser(emailId: String(320))                                                              returns Boolean;
     action   updateUser(payload: userUpdate)                                                               returns UserResourceMapping;
     // action   uploadUsersExcel(fileBase64: LargeString)                                                     returns String;
-
+    action   readFileFromGit(payload: path)                                                                returns String;
+    action   getGitRepoTreeStructure(payload: branch)                                                      returns String;
+    action   getAllBranches(payload: allBranch)                                                            returns String;
+    action   pushFileToGit(payload: gitPayload)                                                            returns String;
     type upload {
         Category   : String;
         Project    : String;
@@ -109,4 +112,39 @@ service cockpit @(requires: 'Viewer') {
         logout_time : DateTime;
         session_id  : String;
     }
+      type path {
+        pathAccess : String;
+        branchName : String;
+        repo       : String;
+        token      : String;
+        username   : String;
+    }
+
+    type branch {
+        branchName : String;
+        repo       : String;
+        token      : String;
+        username   : String;
+    }
+
+    type gitPayload {
+        filePath     : String;
+        content      : String;
+        commitMsg    : String;
+        userName     : String;
+        emailId      : String;
+        branchName   : String;
+        targetBranch : String;
+        repo         : String;
+        token        : String;
+        username     : String;
+    }
+
+    type allBranch {
+        repo     : String;
+        username : String;
+        token    : String
+    }
+
+
 }
